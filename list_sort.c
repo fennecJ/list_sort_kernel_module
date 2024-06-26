@@ -4,11 +4,22 @@
 #include <linux/slab.h> // kmalloc
 #include <linux/list_sort.h>
 #include <linux/ktime.h>
+#include "sort_impl.h"
 
-struct my_data {
-    int value;
-    struct list_head list;
-};
+
+typedef void (*test_func_t)(void *priv,
+                            struct list_head *head,
+                            list_cmp_func_t cmp);
+typedef struct {
+    char *name;
+    test_func_t impl;
+} test_t;
+
+typedef void (*sample_func_t)(struct list_head *head, element_t *space, int samples);
+typedef struct {
+    char *name;
+    sample_func_t impl;
+} sample_t;
 
 static struct list_head my_list;
 
@@ -760,57 +771,74 @@ static int datas[] = {
 };
 
 static int cmp(void *priv, const struct list_head *a, const struct list_head *b) {
-    struct my_data *a_data = list_entry(a, struct my_data, list);
-    struct my_data *b_data = list_entry(b, struct my_data, list);
+    element_t *a_data = list_entry(a, element_t, list);
+    element_t *b_data = list_entry(b, element_t, list);
     int *cnt = (int*)priv;
     (*cnt)++;
-    return a_data->value - b_data->value;
+    return a_data->val - b_data->val;
+}
+
+static void refill_list_data(struct list_head* head){
+    element_t *ele_entry;
+    int i = 0;
+    list_for_each_entry(ele_entry, head, list){
+        ele_entry->val = datas[i];
+        ele_entry->seq = i;
+        ++i;
+    }
 }
 
 static int __init my_module_init(void) {
     ktime_t start_time, stop_time, elapsed_time;
-    struct my_data *data;
+    element_t *data;
     int i;
     int cmp_cnt = 0;
-    int data_len = sizeof(datas) / sizeof(int);
+    test_t *test;
 
+    test_t tests[] = {
+        {.name = "timsort", .impl = timsort},
+        {.name = "adaptive_ShiversSort", .impl = adaptive_ShiversSort},
+        {.name = "powerSort", .impl = power_sort},
+        {.name = "listSort", .impl = list_sort},
+        {NULL, NULL},
+    };
+
+    test = tests;    
+    // prepare data
     INIT_LIST_HEAD(&my_list);
-
-    for(i = 0; i < data_len; i++){
+    for(i = 0; i < SAMPLES; i++){
         data = kmalloc(sizeof(*data), GFP_KERNEL);
         if(!data){
             pr_info("list_sort_tst_OOM!!");
             return -ENOMEM;
         }
-        data->value = datas[i];
+        data->val = datas[i];
+        data->seq = i;
         list_add(&data->list, &my_list);
     }
-
-    // for (i = 10; i > 0; i--) {
-    //     data = kmalloc(sizeof(*data), GFP_KERNEL);
-    //     if (!data)
-    //         return -ENOMEM;
-
-    //     data->value = 10 - i;
-    //     list_add(&data->list, &my_list);
-    // }
-
-    // printk(KERN_INFO "List before sorting:\n");
-    // list_for_each_entry(data, &my_list, list) {
-    //     printk(KERN_INFO "Value: %d\n", data->value);
-    // }
-    start_time = ktime_get();
-    list_sort(&cmp_cnt, &my_list, cmp);
-    stop_time = ktime_get();
-    elapsed_time = stop_time - start_time;
-    printk(KERN_INFO "List done sort:\n");
-    pr_info("Comparison cnt: %d", cmp_cnt);
-    pr_info("elapsed time: %llu ns", elapsed_time);
+    elapsed_time = 0;
+    while (test->impl)
+    {
+        for(i = 0; i < ITERS; i++){
+            start_time = ktime_get();
+            test->impl(&cmp_cnt, &my_list, cmp);
+            stop_time = ktime_get();
+            elapsed_time += stop_time - start_time;
+            refill_list_data(&my_list);
+        }
+        printk(KERN_INFO "List done sort with %s, iter = %d:\n", test->name, ITERS);
+        pr_info("Comparison cnt: %d", cmp_cnt);
+        pr_info("elapsed time: %llu ns", elapsed_time);
+        refill_list_data(&my_list);
+        cmp_cnt = 0;
+        elapsed_time = 0;
+        test++;
+    }
     return 0;
 }
 
 static void __exit my_module_exit(void) {
-    struct my_data *data, *tmp;
+    struct element_t *data, *tmp;
 
     list_for_each_entry_safe(data, tmp, &my_list, list) {
         list_del(&data->list);
