@@ -1,14 +1,13 @@
-#include<linux/list.h>
-#ifndef _SORT_IMPL_
-#define _SORT_IMPL_
-#define SAMPLES 744
-#define ITERS 40
+#include <linux/module.h>
+#include <linux/kernel.h>
 
-typedef struct element_t {
-    struct list_head list;
-    int val;
-    int seq;
-} element_t;
+size_t data_len = 0;
+
+void list_impl_set_data_len(size_t len){
+    data_len = len;
+}
+EXPORT_SYMBOL(list_impl_set_data_len);
+
 struct list_head;
 
 typedef int (*list_cmp_func_t)(void *,
@@ -16,7 +15,7 @@ typedef int (*list_cmp_func_t)(void *,
                                const struct list_head *);
 
 
-#define likely(x)       __builtin_expect(!!(x), 1)
+// #define likely(x)       __builtin_expect(!!(x), 1)
 
 static inline size_t run_size(struct list_head *head)
 {
@@ -42,10 +41,6 @@ static struct list_head *merge(void *priv,
                                struct list_head *a,
                                struct list_head *b)
 {
-    // size_t a_len = run_size(a);
-    // size_t b_len = run_size(b);
-    // size_t max_len = (a_len > b_len) ? a_len : b_len;
-
     struct list_head *head;
     struct list_head **tail = &head;
 
@@ -246,11 +241,7 @@ void timsort(void *priv, struct list_head *head, list_cmp_func_t cmp)
     }
     merge_final(priv, cmp, head, stk1, stk0);
 }
-
-// static inline size_t ilog2(size_t x){
-//     return (size_t) (63 - __builtin_clzl(x));
-// }
-
+EXPORT_SYMBOL(timsort);
 
 static struct list_head *merge_collapse_ass(void *priv,
                                         list_cmp_func_t cmp,
@@ -305,6 +296,7 @@ void adaptive_ShiversSort(void *priv, struct list_head *head, list_cmp_func_t cm
     }
     merge_final(priv, cmp, head, stk1, stk0);
 }
+EXPORT_SYMBOL(adaptive_ShiversSort);
 
 static inline size_t nodePower(struct list_head *h1, struct list_head *h2, 
                                 size_t start_A, size_t len)
@@ -340,9 +332,13 @@ void power_sort(void *priv, struct list_head *head, list_cmp_func_t cmp){
     stk_size = 0;
     size_t start_A = 0;
     struct list_head *list = head->next, *tp = NULL;
+
     if (head == head->prev)
         return;
-
+    if(data_len == 0){
+        pr_info("data_len is uninitiallized");
+        return;
+    }
     /* Convert to a null-terminated singly-linked list. */
     head->prev->next = NULL;
     do {
@@ -354,7 +350,7 @@ void power_sort(void *priv, struct list_head *head, list_cmp_func_t cmp){
         list = result.next;
         pow_stack[stk_size][1] = start_A;
         if(stk_size) {
-            size_t tp_power = nodePower(tp->prev, tp, pow_stack[stk_size-1][1], SAMPLES);
+            size_t tp_power = nodePower(tp->prev, tp, pow_stack[stk_size-1][1], data_len);
             tp = merge_collapse_power(priv, cmp, tp, tp_power);
         }
         stk_size++;
@@ -375,66 +371,21 @@ void power_sort(void *priv, struct list_head *head, list_cmp_func_t cmp){
     }
     merge_final(priv, cmp, head, stk1, stk0);
 }
+EXPORT_SYMBOL(power_sort);
 
-
-void list_sort(void *priv, struct list_head *head, list_cmp_func_t cmp)
-{
-	struct list_head *list = head->next, *pending = NULL;
-	size_t count = 0;	/* Count of pending */
-	if (list == head->prev)	/* Zero or one elements */
-		return;
-	/* Convert to a null-terminated singly-linked list. */
-	head->prev->next = NULL;
-	/*
-	 * Data structure invariants:
-	 * - All lists are singly linked and null-terminated; prev
-	 *   pointers are not maintained.
-	 * - pending is a prev-linked "list of lists" of sorted
-	 *   sublists awaiting further merging.
-	 * - Each of the sorted sublists is power-of-two in size.
-	 * - Sublists are sorted by size and age, smallest & newest at front.
-	 * - There are zero to two sublists of each size.
-	 * - A pair of pending sublists are merged as soon as the number
-	 *   of following pending elements equals their size (i.e.
-	 *   each time count reaches an odd multiple of that size).
-	 *   That ensures each later final merge will be at worst 2:1.
-	 * - Each round consists of:
-	 *   - Merging the two sublists selected by the highest bit
-	 *     which flips when count is incremented, and
-	 *   - Adding an element from the input as a size-1 sublist.
-	 */
-	do {
-		size_t bits;
-		struct list_head **tail = &pending;
-		/* Find the least-significant clear bit in count */
-		for (bits = count; bits & 1; bits >>= 1)
-			tail = &(*tail)->prev;
-		/* Do the indicated merge */
-		if (likely(bits)) {
-			struct list_head *a = *tail, *b = a->prev;
-			a = merge(priv, cmp, b, a);
-			/* Install the merged result in place of the inputs */
-			a->prev = b->prev;
-			*tail = a;
-		}
-		/* Move one element from input list to pending */
-		list->prev = pending;
-		pending = list;
-		list = list->next;
-		pending->next = NULL;
-		count++;
-	} while (list);
-	/* End of input; merge together all the pending lists. */
-	list = pending;
-	pending = pending->prev;
-	for (;;) {
-		struct list_head *next = pending->prev;
-		if (!next)
-			break;
-		list = merge(priv, cmp, pending, list);
-		pending = next;
-	}
-	/* The final merge, rebuilding prev links */
-	merge_final(priv, cmp, head, pending, list);
+static int __init list_impl_init(void){
+    pr_info("list_impl is inserted to kernel");
+    return 0;
 }
-#endif // !_SORT_IMPL_
+
+static void __exit list_impl_exit(void) {
+    pr_info("last data_len is %lu", data_len);
+    pr_info("list_impl is removed from kernel");
+}
+
+module_init(list_impl_init);
+module_exit(list_impl_exit);
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("GPT");
+MODULE_DESCRIPTION("A simple kernel module to implements list sorting alg");
