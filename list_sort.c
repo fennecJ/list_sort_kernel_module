@@ -6,7 +6,7 @@
 #include <linux/ktime.h>
 // #include "sort_impl.h"
 
-#define TEST_FILE "perf_metric_list.h"
+#define TEST_FILE "datasets/perf_metric_list.h"
 #define ITERS 4000
 
 #include TEST_FILE
