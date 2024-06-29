@@ -55,4 +55,39 @@ static void refill_list_data(struct list_head* head){
     }
 }
 
-#endif // !DATA_1D_H
+static bool check_list(struct list_head *head, size_t statistic)
+{
+    if (list_empty(head))
+        return 0 == statistic;
+
+    element_t *entry, *safe;
+    size_t ctr = 0;
+    list_for_each_entry_safe (entry, safe, head, list) {
+        ctr++;
+    }
+    int unstable = 0;
+    list_for_each_entry_safe (entry, safe, head, list) {
+        if (entry->list.next != head) {
+            if (entry->val1 > safe->val1 || (entry->val1 == safe->val1 && entry->val2 > safe->val2)) {
+                pr_info("ERROR: Wrong order");
+                return false;
+            }
+
+            if ((entry->val1 == safe->val1) && (entry->val2 == safe->val2) && entry->seq > safe->seq)
+                unstable++;
+        }
+    }
+    if (unstable) {
+        pr_info("ERROR: unstable %d", unstable);
+        return false;
+    }
+
+    if (ctr != statistic) {
+        pr_info("ERROR: Inconsistent number of elements: %ld\n", ctr);
+        return false;
+    }
+    return true;
+}
+
+
+#endif // !DATA_2D_H

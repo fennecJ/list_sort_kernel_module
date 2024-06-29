@@ -5,7 +5,7 @@
 #include <linux/list_sort.h>
 #include <linux/ktime.h>
 
-#define TEST_FILE "datasets/xfs_ext_busy_1.h"
+#define TEST_FILE "datasets/xfs_ext_busy_2.h"
 #include TEST_FILE
 #define ITERS 4000
 // #include "data_1D.h"
@@ -42,6 +42,9 @@ test_t tests[] = {
 
 static int __init my_module_init(void) {
     ktime_t start_time, stop_time, elapsed_time;
+    unsigned long long time_rec[4] = {0};
+    int cnt_rec[4] = {0};
+    int rec_ind = 0;
     int i;
     int cmp_cnt = 0;
     test_t *test;
@@ -65,18 +68,26 @@ static int __init my_module_init(void) {
             test->impl(&cmp_cnt, &my_list, cmp);
             stop_time = ktime_get();
             elapsed_time += stop_time - start_time;
+            if(!check_list(&my_list, data_len))
+                pr_info("check list failed!!");
             refill_list_data(&my_list);
         }
         printk(KERN_INFO "List done sort with %s, iter = %d, data_len = %lu:\n", test->name, ITERS, data_len);
         pr_info("Comparison cnt: %d", cmp_cnt);
         pr_info("elapsed time: %llu ns", elapsed_time);
         refill_list_data(&my_list);
+        time_rec[rec_ind] = elapsed_time;
+        cnt_rec[rec_ind] = cmp_cnt;
+        rec_ind++;
         cmp_cnt = 0;
         elapsed_time = 0;
         test++;
     }
     local_irq_enable();
     put_cpu();
+    // pr_info("| %s  | - | - |  - | - |", TEST_FILE);
+    // pr_info("| time | %llu | %llu | %llu | %llu |", time_rec[0], time_rec[1], time_rec[2], time_rec[3]);
+    // pr_info("| cmp cnt | %d | %d | %d | %d |", cnt_rec[0], cnt_rec[1], cnt_rec[2], cnt_rec[3]);
     return 0;
 }
 
